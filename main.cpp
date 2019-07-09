@@ -9,8 +9,13 @@
 #include <util.hpp>
 #include <Arduino_JSON.h>
 #include <string.h>
-#include <HTTPClient.h>
-#include <StreamString.h>
+#include <Update.h>
+#include <Arduino.h>
+#include <AsyncElegantOTA.h>
+#include <ESPAsyncWebServer.h>
+#include <AsyncTCP.h>
+#include <ESPmDNS.h>
+
 
 #define USE_POT_CONTROL 1
 #define PRINT_CALLBACK  0
@@ -41,9 +46,7 @@ char curMessage[BUF_SIZE];
 char newMessage[BUF_SIZE];
 bool newMessageAvailable = false;
 String GLOBALMSG = " WOLNY !!! ";
-
 bool GLOBALCHGFLAG = false;
-
 double GLOBALTEMPERATURA = -1.00;
 double GLOBALWILGOTNOSC = -1.00;
 double GLOBALCISNIENIE = -1.00;
@@ -52,9 +55,13 @@ double GLOBALPREVWILGOTNOSC = -1.00;
 double GLOBALPREVCISNIENIE = -1.00;
 bool GLOBALTRYBAUTO = true;
 int GLOBALOKNO = -1; 
+String GLOBALEXTRESADDR = "http://gbulawa.nazwa.pl/CDN/ajot/NIEZAJETY";
+const char* host = "esp32";
 UselessHelper uHelper;
 
 uint16_t  scrollDelay;  // in milliseconds
+
+
 
 void setGLOBALMSG(String newMsg){
     String replaced = newMsg;
@@ -108,7 +115,7 @@ uint8_t scrollDataSource(uint8_t dev, MD_MAX72XX::transformType_t t)
   static uint8_t  state = 0;
   static uint8_t  curLen, showLen;
   static uint8_t  cBuf[8];
-  uint8_t colData;
+  uint8_t colData = 0;
 
   // finite state machine to control what we do on the callback
   switch(state)
@@ -194,14 +201,17 @@ void handleURLParam(HTTPRequest * req, HTTPResponse * res);
 void handleNiezajety(HTTPRequest * req, HTTPResponse * res);
 void handleGetJSON(HTTPRequest * req, HTTPResponse * res);
 void handleGetWeatherStationData(HTTPRequest * req, HTTPResponse * res);
-void middlewareLogging(HTTPRequest * req, HTTPResponse * res, std::function<void()> next);
+
+//ota server
+AsyncWebServer server(8080);
+
+const char* PARAM_MESSAGE = "message";
+
 void setup()
 {
   mx.begin();
   mx.setShiftDataInCallback(scrollDataSource);
-  mx.setShiftDataOutCallback(scrollDataSink);
-
-  
+  mx.setShiftDataOutCallback(scrollDataSink);  
 
 #if USE_POT_CONTROL
   pinMode(SPEED_IN, INPUT);
@@ -209,7 +219,6 @@ void setup()
   scrollDelay = SCROLL_DELAY;
 #endif
 
-  
   Serial.begin(115200);
 	// Connect to WiFi
 	Serial.println("Setting up WiFi");
@@ -220,11 +229,11 @@ void setup()
 	}
 	Serial.print("Connected. IP=");
 	Serial.println(WiFi.localIP());
-  setGLOBALMSG(WiFi.localIP().toString());
+  setGLOBALMSG("JEBAC BIEDE");//WiFi.localIP().toString());
   //String s = WiFI->localIP().toString();
 	Serial.println("Creating server task... ");  
   ResourceNode * nodeRoot    = new ResourceNode("/", "GET", &handleRoot);
-  ResourceNode * nodeNiezajetyRoot    = new ResourceNode("/niezajety*", "GET", &handleRoot);
+  ResourceNode * nodeNiezajetyRoot    = new ResourceNode("/niezajety", "GET", &handleRoot);
   ResourceNode * nodeExternal    = new ResourceNode("/external/*", "GET", &handleExternal);
 	ResourceNode * node404     = new ResourceNode("", "GET", &handle404);
   ResourceNode * nodeURLParam = new ResourceNode("/set/*", "GET", &handleURLParam);
@@ -241,7 +250,6 @@ void setup()
   insecureServer.registerNode(nodeNiezajety);
   insecureServer.registerNode(apiNode);
   insecureServer.registerNode(weatherStationDataNode);
-  insecureServer.addMiddleware(&middlewareLogging);
   
 	Serial.println("Starting server...");
 	insecureServer.start();
@@ -249,7 +257,18 @@ void setup()
 		Serial.println("Server ready.");
 		
 	}  
-  
+
+    /*use mdns for host name resolution*/
+  if (!MDNS.begin(host)) { //http://esp32.local
+    Serial.println("Error setting up MDNS responder!");
+    while (1) {
+      delay(1000);
+    }
+  }
+  Serial.println("mDNS responder started");
+    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
+  server.begin();
+
 }
 
 void loop()
@@ -261,7 +280,8 @@ void loop()
     GLOBALCHGFLAG = false;
   }
   scrollText();
-    insecureServer.loop();
+  insecureServer.loop();
+  AsyncElegantOTA.loop();
 }
 
 void updatePreviousValues(void){
@@ -297,8 +317,6 @@ void handleRoot(HTTPRequest * req, HTTPResponse * res) {
   res->setHeader("Accept","*/*");
   res->setHeader("Access-Control-Allow-Origin","*"); 
   res->setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res->setHeader("Referer", "http://gbulawa.nazwa.pl/CDN/ajot/NIEZAJETY/");
-  res->setHeader("HOST", "gbulawa.nazwa.pl");
 	std::string reqStr = req -> getRequestString();
   if(reqStr.find("niezajety")!=std::string::npos){
     res->print(generateHTMLnz());	
@@ -307,10 +325,14 @@ void handleRoot(HTTPRequest * req, HTTPResponse * res) {
   }
   res -> finalize();
 }
+
 void handleExternal(HTTPRequest * req, HTTPResponse * res) {
- 	 std::string reqUrl1 = "http://gbulawa.nazwa.pl/CDN/ajot/NIEZAJETY";
+ 	 std::string reqUrl1 = GLOBALEXTRESADDR.c_str();
    reqUrl1 += req -> getRequestString();
-   res -> setHeader("Location",reqUrl1);
+   String reqUrl2 = "";
+   reqUrl2 += reqUrl1.c_str();
+   reqUrl2.replace("external/","");
+   res -> setHeader("Location",reqUrl2.c_str());
    res -> setStatusCode(302);
    res -> finalize();
 }
@@ -383,21 +405,6 @@ void handleGetWeatherStationData(HTTPRequest * req, HTTPResponse * res) {
   res->setHeader("Accept","*/*");
   res->setHeader("Access-Control-Allow-Origin","*"); 
   res->setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res->setHeader("Referer", "http://gbulawa.nazwa.pl/CDN/ajot/NIEZAJETY/");
 	res->print(uHelper.BuildWeatherStationDataTxt(GLOBALTEMPERATURA, GTFahnrheits, GLOBALWILGOTNOSC,GLOBALCISNIENIE,GLOBALPREVTEMPERATURA,GLOBALPREVWILGOTNOSC,GLOBALPREVCISNIENIE));//jsonString);
   res -> finalize();
-}
-
-void middlewareLogging(HTTPRequest * req, HTTPResponse * res, std::function<void()> next) {
-	// We want to print the response status, so we need to call next() first.
-	next();
-	// After the call, the status is (hopefully) set by the handler function, so we can
-	// access it for logging.
-	Serial.printf("middlewareLogging(): %3d\t%s\t\t%s\n",
-			// Status code (like: 200)
-			res->getStatusCode(),
-			// Method used for the request (like: GET)
-			req->getMethod().c_str(),
-			// Request string (like /index.html)
-			req->getRequestString().c_str());
 }

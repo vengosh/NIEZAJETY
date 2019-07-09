@@ -1,0 +1,17 @@
+<svg width="353" height="83" xmlns="http://www.w3.org/2000/svg">
+ <!-- Created with Method Draw - http://github.com/duopixel/Method-Draw/ -->
+
+ <g>
+  <title>background</title>
+  <rect fill="none" id="canvas_background" height="85" width="355" y="-1" x="-1"/>
+  <g display="none" overflow="visible" y="0" x="0" height="100%" width="100%" id="canvasGrid">
+   <rect fill="url(#gridpattern)" stroke-width="0" y="0" x="0" height="100%" width="100%"/>
+  </g>
+ </g>
+ <g>
+  <title>Layer 1</title>
+  <text stroke="#000" xml:space="preserve" text-anchor="start" font-family="Junction, sans-serif" font-size="2" id="svg_4" y="19.5" x="79" fill-opacity="null" stroke-opacity="null" stroke-width="0" fill="#000000"/>
+  <text font-style="normal" font-weight="bold" stroke="#000" transform="matrix(1.2718193691694528,0,0,2.5165763653667885,-24.566299628079094,-0.900254926485557) " xml:space="preserve" text-anchor="start" font-family="'League Gothic', sans-serif" font-size="13" id="svg_8" y="15.714154" x="28.531713" stroke-opacity="null" stroke-width="0" fill="#84D3DB">#RARYTAS  #JEDYNYTAKI  #BIALYKRUK</text>
+  <text font-weight="bold" stroke="#000" transform="matrix(1.5681763897362093,0,0,1.866666674613953,-5.8494631892293425,-41.16666704416275) " xml:space="preserve" text-anchor="start" font-family="'Trebuchet MS', Gadget, sans-serif" font-size="12" id="svg_9" y="59.5" x="6.5" stroke-opacity="null" stroke-width="0" fill="#8CD79F">ESP32/ESP8266 OTA Firmware Updater</text>
+ </g>
+</svg>
